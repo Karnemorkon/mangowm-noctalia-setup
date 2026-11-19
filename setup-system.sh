@@ -84,7 +84,7 @@ log "[2/7] Підключення ButterRepo та офіційного репо�
 
 # ButterRepo — amd64-only ключ та репозиторій stable main.
 install -d -m 0755 /usr/share/keyrings
-curl -fsSL https://apt.justaguy.dev/key.asc | gpg --dearmor -o /usr/share/keyrings/butterrepo.gpg
+curl -fsSL https://apt.justaguy.dev/key.asc | gpg --batch --yes --dearmor -o /usr/share/keyrings/butterrepo.gpg
 chmod 0644 /usr/share/keyrings/butterrepo.gpg
 
 cat > /etc/apt/sources.list.d/butterrepo.list <<'EOF'
