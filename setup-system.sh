@@ -118,7 +118,8 @@ apt-get install -y \
     slurp wl-clipboard ripgrep jq fzf git curl wget unzip ca-certificates \
     xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
     pipewire pipewire-audio wireplumber polkitd pkexec \
-    fonts-noto-color-emoji upower power-profiles-daemon
+    fonts-noto-color-emoji upower power-profiles-daemon \
+    lightdm lightdm-gtk-greeter
 
 # ------------------------------------------------------------------------------
 # 4. Конфігурація MangoWM (0.14.x, ButterRepo)
@@ -361,7 +362,7 @@ chown -R "$REAL_USER:$REAL_GROUP" "$HERMES_DIR"
 # ------------------------------------------------------------------------------
 # 6. OpenCode
 # ------------------------------------------------------------------------------
-log "[6/7] Встановлення OpenCode"
+log "[6/8] Встановлення OpenCode"
 
 if [ ! -x "$USER_HOME/.opencode/bin/opencode" ] && [ ! -x "$USER_HOME/.local/bin/opencode" ]; then
     runuser -u "$REAL_USER" -- env HOME="$USER_HOME" USER="$REAL_USER" \
@@ -372,9 +373,44 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 7. Права доступу та підсумок
+# 7. Графічний вхід (Display Manager)
 # ------------------------------------------------------------------------------
-log "[7/7] Виставлення власника файлів"
+log "[7/8] Налаштування графічного входу (lightdm)"
+
+# Сесійний файл Mango для display manager (створюємо, якщо пакет не додав)
+install -d /usr/share/wayland-sessions
+if [ ! -f /usr/share/wayland-sessions/mango.desktop ]; then
+    cat > /usr/share/wayland-sessions/mango.desktop <<'EOF'
+[Desktop Entry]
+Encoding=UTF-8
+Name=Mango
+DesktopNames=mango;wlroots
+Comment=MangoWM (Wayland)
+Exec=/usr/bin/mango-session
+TryExec=/usr/bin/mango-session
+Icon=mango
+Type=Application
+EOF
+fi
+
+# lightdm як за замовчуванням, якщо ще не вибрано інший DM
+if debconf-get-selections 2>/dev/null | grep -q '^lightdm'; then
+    :
+else
+    echo "lightdm lightdm/default_greeter string lightdm-gtk-greeter" \
+        | debconf-set-selections 2>/dev/null || true
+fi
+
+# Увімкнути graphical.target та lightdm
+systemctl set-default graphical.target 2>/dev/null || true
+systemctl enable lightdm 2>/dev/null || true
+
+update-desktop-database -q /usr/share/applications 2>/dev/null || true
+
+# ------------------------------------------------------------------------------
+# 8. Права доступу та підсумок
+# ------------------------------------------------------------------------------
+log "[8/8] Виставлення власника файлів"
 
 chown -R "$REAL_USER:$REAL_GROUP" "$MANGO_CONF_DIR"
 [ -d "$USER_HOME/.opencode" ] && chown -R "$REAL_USER:$REAL_GROUP" "$USER_HOME/.opencode"
@@ -390,6 +426,7 @@ cat <<EOF
   • підключено ButterRepo (mangowc 0.14.4 + libwlroots-0.19 + libscenefx-0.4);
   • встановлено Noctalia Shell з офіційного репозиторію;
   • встановлено kitty, xwayland, портали, PipeWire/WirePlumber, polkit;
+  • встановлено lightdm і увімкнено graphical.target (графічний вхід після перезавантаження);
   • створено конфігурацію ~/.config/mango/ (mangowc 0.14.x синтаксис);
   • встановлено Hermes Agent та OpenCode;
   • створено навичку ~/.hermes/skills/debian-mangowm/SKILL.md.
@@ -401,8 +438,7 @@ cat <<EOF
      або запустити \`hermes setup\` і пройти майстер.
   2. Перевірити моделі:  hermes config get model
                         hermes fallback list
-  3. Запустити сесію: вийдіть із поточного сеансу та оберіть
-     "Mango" у display manager, або запустіть \`mango-session\` з TTY.
+  3. Перезавантажити комп’ютер — з’явиться екран входу lightdm з сесією "Mango".
 
 Гарячі клавіші:
   Super+Return — kitty            Super+A — Hermes
