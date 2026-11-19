@@ -14,7 +14,7 @@
 Раніше рекомендували збирати `libdrm 2.4.134` + `wlroots 0.20.2` + `scenefx 0.5` + `mango 0.18.6` з джерел. На Debian 13 це не слід робити:
 
 1. `wlroots 0.20.2` вимагає `wayland >= 1.24`, `wayland-protocols >= 1.47`, `xkbcommon >= 1.8`, які у trixie старіші. Потрібні б `trixie-backports` і повне перезібраття стеку.
-2. `scenefx 0.5` і `mango 0.18.6` требують `wlroots-0.20` — він недоступний у репозиторіях trixie.
+2. `scenefx 0.5` і `mango 0.18.6` вимагають `wlroots-0.20` — він недоступний у репозиторіях trixie.
 3. ButterRepo вже збирав `mangowc 0.14.4` під `wlroots-0.19` / `scenefx 0.4`, що працює на системних бібліотеках trixie без збирання нічого з джерел.
 4. `mangowc` — це пакетна назва; бінарник і команда у терміналі — `mango`. IPC-інструмент — `mmsg`.
 
@@ -41,7 +41,7 @@ sudo ./setup-system.sh
 3. Підключає **офіційний репозиторій Noctalia** (`pkg.noctalia.dev/deb`, ключ `nickh-archive-keyring.gpg`, джерело `noctalia-trixie.sources`).
 4. Встановлює `mangowc libwlroots-0.19 libscenefx-0.4`, `noctalia`, `kitty`, `xwayland`, портали, PipeWire/WirePlumber, polkit, шрифти, `lightdm`, `zenity` та допоміжні інструменти.
 5. Пише конфігурацію MangoWM 0.14.x у `~/.config/mango/`:
-   - `config.conf` — `source`-посилання, `layer_animations=0`, `single_scratchpad=0`, `xkb_rules_layout=us,ua`, `source-optional=~/.config/mango/noctalia.conf` (для кольорів теми Noctalia).
+   - `config.conf` — `source`-посилання, `layer_animations=0`, `single_scratchpad=0`.
    - `layout.conf` — `circle_layout=scroller,tile,grid` і параметри Scroller.
    - `input.conf` — розкладки `us,ua`, перемикання `grp:alt_shift_toggle`.
    - `rules.conf` — `windowrule=isnamedscratchpad:1,...` для `hermes-scratchpad` і `opencode-scratchpad`; `single_scratchpad=0` — в `config.conf`.
@@ -52,6 +52,8 @@ sudo ./setup-system.sh
 8. Встановлює OpenCode (`~/.opencode/bin/opencode`).
 9. Створює навичку Hermes `~/.hermes/skills/debian-mangowm/SKILL.md`.
 
+Шаблон теми Noctalia «Mango» **не вмикається**: він генерує синтаксис Mango 0.18+ (`root_color`, `border_color`, ...), несумісний з `mangowc` 0.14.4. Якщо шаблон уже було ввімкнено — вимкніть його, інакше Mango повідомить про невідомі ключі.
+
 Після завершення скрипта додайте ключ NVIDIA у `~/.hermes/.env` (або запустіть `hermes setup`) і оберіть сесію "Mango" у дисплей-менеджері або запустіть `mango-session` з TTY.
 
 ### Вікно вітання при першому вході
@@ -60,7 +62,7 @@ sudo ./setup-system.sh
 
 - **Перевірити установку** — перевіряє наявність команд, конфігів, стану `lightdm` і ключа NVIDIA.
 - **NVIDIA API-ключ** — відкриває сторінку створення ключів на build.nvidia.com та файл `~/.hermes/.env` для редагування.
-- **Автоувійн** — налаштовує `lightdm` для входу без пароля (потребує `sudo`).
+- **Автовхід** — налаштовує `lightdm` для входу без пароля (потребує прав адміністратора через `pkexec`).
 - **Інструкція на GitHub** — відкриває README репозиторію у браузері.
 - **Не показувати більше** — приховає вікно вітання навжди.
 
@@ -72,7 +74,7 @@ sudo ./setup-system.sh
 
 ### Синтаксис 0.14.x (відмінно від 0.18.6)
 
-| Дію | 0.14.x (mangowc) | 0.18.6 (застаріло) |
+| Дію | 0.14.x (mangowc) | 0.18.6 (новіший синтаксис) |
 |-----|------------------|--------------------|
 | Правило вікна | `windowrule=Parameter:Value,...` | `window_rule=...` |
 | Named scratchpad | `isnamedscratchpad:1` | `is_named_scratchpad:1` |
@@ -80,7 +82,7 @@ sudo ./setup-system.sh
 | Автозапуск | `exec-once=noctalia` | `exec_once=noctalia` |
 | Додатковий конфіг | `source-optional=...` | `source_optional=...` |
 | Обмін вікон | `exchange_client` | `move_client` (немає у 0.14.x) |
-| ДISPATCHER-команди | `togglefloating`, `togglefullscreen`, `killclient`, `reload_config`, `quit`, `spawn`, `switch_layout`, `setlayout`, `focusdir`, `focusstack`, `view`, `tag` | аналогічні, окрім `move_client` |
+| dispatcher-команди | `togglefloating`, `togglefullscreen`, `killclient`, `reload_config`, `quit`, `spawn`, `switch_layout`, `setlayout`, `focusdir`, `focusstack`, `view`, `tag` | аналогічні, окрім `move_client` |
 
 Перевірка конфігу без запуску композитора:
 
@@ -191,7 +193,7 @@ exec-once=noctalia
 
 Noctalia сама керує шпалерами, тому окрема `awww` / `swaybg` не потрібна і виключена зі стеку.
 
-Noctalia записує кольори теми у `~/.config/mango/noctalia.conf` і додає рядок `source=~/.config/mango/noctalia.conf` до вашої конфігурації, коли вона існуюча і доступна для запису. Файл створено заздалегідь (через `source-optional`), щоб не бути дубльованим.
+Шаблон теми Noctalia «Mango» (Settings → Templates → Mango) генерує `~/.config/mango/noctalia.conf` із синтаксисом Mango 0.18+ (`root_color`, `border_color`, ...). На `mangowc` 0.14.4 цей файл не застосовується, тому скрипт його не створює і не додає `source-optional`. Не вмикайте цей шаблон на 0.14.4.
 
 ## Noctalia Shell
 
@@ -200,7 +202,7 @@ Noctalia записує кольори теми у `~/.config/mango/noctalia.con
 - Панелі: `panel-toggle launcher`, `panel-toggle control-center`, `panel-toggle clipboard`, `panel-toggle wallpaper`, `panel-toggle session`.
 - Налаштування: `settings-toggle`.
 - Док: `dock-toggle`.
--壁папір: `panel-toggle wallpaper` (вбудований вибір, окрема утиліта не потрібна).
+- Шпалери: `panel-toggle wallpaper` (вбудований вибір, окрема утиліта не потрібна).
 
 Якщо Noctalia раніше була з проектом Quickshell (`noctalia-qs`), команда `noctalia` у v5 — це нативна C++ оболонка; команди v4 не підходять.
 
@@ -275,7 +277,7 @@ mango-session
 
 Якщо потрібна новіша версія MangoWM, пам'ятайте:
 
-- `mango 0.18.6` потребує `wlroots-0.20`, `scenefx-0.5`, `libdrm >= 2.4.129` — вони **неіснують** у репозиторіях trixie і вимагають повного збирання з джерел з `trixie-backports`.
+- `mango 0.18.6` потребує `wlroots-0.20`, `scenefx-0.5`, `libdrm >= 2.4.129` — вони **не існують** у репозиторіях trixie і вимагають повного збирання з джерел з `trixie-backports`.
 - `mangowc 0.14.4` (ButterRepo) — остання лінія mango, що збирається на системному стеку trixie без додаткових збирань.
 
 Цей крок опущено з основного скрипта і не входить до рекомендованого налаштування.

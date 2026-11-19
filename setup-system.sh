@@ -12,7 +12,7 @@
 #
 # Стеки використані:
 #   • MangoWM (mangowc) 0.14.4 з ButterRepo (amd64-only) — пов'язаний із
-#     libwlroots-0.19 та libscenefx-0.4, що nudують на trixie Wayland-стек.
+#     libwlroots-0.19 та libscenefx-0.4, що спираються на системний стек trixie.
 #   • Noctalia Shell 5.5.0 з офіційного APT-репозиторію.
 #   • Hermes Agent + OpenCode у іменованих scratchpad-вікнах kitty.
 # ==============================================================================
@@ -24,13 +24,11 @@ log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[!]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[✗]\033[0m %s\n' "$*" >&2; exit 1; }
 
-cleanup() {
-    :
-}
 on_error() {
     local rc=$?
-    printf '\033[1;31m[✗] Помилка на рядку %s (код %s). Дивіться вивід вище.\n' \
-        "${LINENO:-?}" "$rc" >&2
+    trap - ERR
+    printf '\033[1;31m[✗] Помилка: `%s` (рядок %s, код %s). Дивіться вивід вище.\n' \
+        "${BASH_COMMAND:-?}" "${BASH_LINENO[0]:-?}" "$rc" >&2
     exit "$rc"
 }
 trap on_error ERR
@@ -62,7 +60,7 @@ log "Користувач: $REAL_USER ($USER_HOME), архітектура: $ARC
 # ------------------------------------------------------------------------------
 # 1. Базові пакети, локаль, часовий пояс
 # ------------------------------------------------------------------------------
-log "[1/7] Базові пакети, локаль uk_UA.UTF-8, часовий пояс Europe/Kyiv"
+log "[1/8] Базові пакети, локаль uk_UA.UTF-8, часовий пояс Europe/Kyiv"
 
 apt-get update
 apt-get install -y \
@@ -80,7 +78,7 @@ update-locale LANG=uk_UA.UTF-8
 # ------------------------------------------------------------------------------
 # 2. Репозиторії: ButterRepo (mangowc) та офіційний Noctalia
 # ------------------------------------------------------------------------------
-log "[2/7] Підключення ButterRepo та офіційного репозиторію Noctalia"
+log "[2/8] Підключення ButterRepo та офіційного репозиторію Noctalia"
 
 # ButterRepo — amd64-only ключ та репозиторій stable main.
 install -d -m 0755 /usr/share/keyrings
@@ -110,7 +108,7 @@ apt-get update
 # ------------------------------------------------------------------------------
 # 3. Wayland-стек + допоміжні пакети
 # ------------------------------------------------------------------------------
-log "[3/7] Встановлення Wayland-стеку (mangowc, wlroots 0.19, scenefx 0.4) та застосунків"
+log "[3/8] Встановлення Wayland-стеку (mangowc, wlroots 0.19, scenefx 0.4) та застосунків"
 
 apt-get install -y \
     mangowc libwlroots-0.19 libscenefx-0.4 \
@@ -118,13 +116,14 @@ apt-get install -y \
     slurp wl-clipboard ripgrep jq fzf git curl wget unzip ca-certificates \
     xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
     pipewire pipewire-audio wireplumber polkitd pkexec \
+    dbus-user-session desktop-file-utils xdg-utils nano libatomic1 \
     fonts-noto-color-emoji upower power-profiles-daemon \
     lightdm lightdm-gtk-greeter zenity
 
 # ------------------------------------------------------------------------------
 # 4. Конфігурація MangoWM (0.14.x, ButterRepo)
 # ------------------------------------------------------------------------------
-log "[4/7] Створення конфігурації MangoWM"
+log "[4/8] Створення конфігурації MangoWM"
 
 MANGO_CONF_DIR="$USER_HOME/.config/mango"
 install -d -o "$REAL_USER" -g "$REAL_GROUP" "$USER_HOME/.config"
@@ -152,13 +151,12 @@ layer_animations=0
 # Дозволити показ кількох іменованих scratchpad одночасно (Hermes + OpenCode).
 single_scratchpad=0
 
-# Мапа клавіатури us,ua, перемикання Alt+Shift.
-xkb_rules_layout=us,ua
-xkb_rules_options=grp:alt_shift_toggle
-
-# Noctalia дописує сюди кольори теми. Файл створюємо заздалегідь, щоб
-# source був стабільним і Noctalia не додавала дублікат.
-source-optional=~/.config/mango/noctalia.conf
+# Мапа клавіатури задається в input.conf.
+#
+# УВАГА: шаблон теми Noctalia для Mango (Settings → Templates → Mango)
+# генерує синтаксис Mango 0.18+ (root_color, border_color, ...). На
+# mangowc 0.14.4 він не застосовується, тому не додаємо source на
+# noctalia.conf і не вмикаємо цей шаблон.
 EOF
 
 cat > "$MANGO_CONF_DIR/layout.conf" <<'EOF'
@@ -268,9 +266,6 @@ exec-once=noctalia
 exec-once=~/.config/mango/welcome.sh
 EOF
 
-# Порожній файл, який Noctalia перезапише кольорами теми.
-: > "$MANGO_CONF_DIR/noctalia.conf"
-
 chown -R "$REAL_USER:$REAL_GROUP" "$MANGO_CONF_DIR"
 
 # Скопіювати вікно вітання та допоміжні скрипти у конфіг Mango.
@@ -296,7 +291,7 @@ fi
 # ------------------------------------------------------------------------------
 # 5. Hermes Agent
 # ------------------------------------------------------------------------------
-log "[5/7] Встановлення та налаштування Hermes Agent"
+log "[5/8] Встановлення та налаштування Hermes Agent"
 
 HERMES_DIR="$USER_HOME/.hermes"
 HERMES_BIN="$USER_HOME/.local/bin/hermes"
@@ -366,7 +361,7 @@ metadata:
    `mango -c ~/.config/mango/config.conf -p`.
 2. Керування оболонкою — через `noctalia msg <command>`.
 3. Логи Noctalia: `~/.cache/noctalia/noctalia.log` (або `$XDG_CACHE_HOME/noctalia/`).
-4. Не додавайте бібліотеки Mango до `/etc/ld.so.conf` — вони з ButteRepo
+4. Не додавайте бібліотеки Mango до `/etc/ld.so.conf` — вони з ButterRepo
    та встановлені системно.
 5. Не запускайте інтерактивні команди без потреби: `apt-get` — з `-y`,
    `hermes setup` — лише коли користувач сам цього хоче.
@@ -379,7 +374,7 @@ chown -R "$REAL_USER:$REAL_GROUP" "$HERMES_DIR"
 # ------------------------------------------------------------------------------
 # 6. OpenCode
 # ------------------------------------------------------------------------------
-log "[6/8] Встановлення OpenCode"
+log "[6/8] Встановлення OpenCode та налаштування PATH"
 
 if [ ! -x "$USER_HOME/.opencode/bin/opencode" ] && [ ! -x "$USER_HOME/.local/bin/opencode" ]; then
     runuser -u "$REAL_USER" -- env HOME="$USER_HOME" USER="$REAL_USER" \
@@ -389,18 +384,21 @@ else
     log "  → opencode уже встановлений, пропускаю"
 fi
 
-# ------------------------------------------------------------------------------
 # PATH для Hermes та OpenCode
-# ------------------------------------------------------------------------------
-log "[6.5/8] Налаштування PATH для Hermes та OpenCode"
-
-# Додати ~/.local/bin і ~/.opencode/bin до PATH у .profile
 PROFILE="$USER_HOME/.profile"
-if ! grep -q 'HOME/\.local/bin' "$PROFILE" 2>/dev/null; then
+touch "$PROFILE"
+if ! grep -q '\.opencode/bin' "$PROFILE" 2>/dev/null; then
     cat >> "$PROFILE" <<'EOF'
 
 # MangoWM + Noctalia setup: PATH for Hermes and OpenCode
-export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+case ":$PATH:" in
+    *":$HOME/.opencode/bin:"*) ;;
+    *) export PATH="$HOME/.opencode/bin:$PATH" ;;
+esac
 EOF
 fi
 
@@ -433,12 +431,10 @@ Type=Application
 EOF
 fi
 
-# lightdm як за замовчуванням, якщо ще не вибрано інший DM
-if debconf-get-selections 2>/dev/null | grep -q '^lightdm'; then
-    :
-else
-    echo "lightdm lightdm/default_greeter string lightdm-gtk-greeter" \
-        | debconf-set-selections 2>/dev/null || true
+# На чистій системі Debian обирає lightdm типовим DM під час встановлення
+# пакета. Якщо файл вибору ще не створено — створюємо його явно.
+if [ ! -e /etc/X11/default-display-manager ]; then
+    echo /usr/sbin/lightdm > /etc/X11/default-display-manager
 fi
 
 # Увімкнути graphical.target та lightdm
@@ -469,7 +465,8 @@ cat <<EOF
   • встановлено lightdm і увімкнено graphical.target (графічний вхід після перезавантаження);
   • створено конфігурацію ~/.config/mango/ (mangowc 0.14.x синтаксис);
   • встановлено Hermes Agent та OpenCode;
-  • створено навичку ~/.hermes/skills/debian-mangowm/SKILL.md.
+  • створено навичку ~/.hermes/skills/debian-mangowm/SKILL.md;
+  • шаблон теми Noctalia "Mango" НЕ ввімкнено: він вимагає Mango >= 0.18.
 
 Залишилося зробити вручну:
   1. Додати ключ NVIDIA у ~/.hermes/.env:

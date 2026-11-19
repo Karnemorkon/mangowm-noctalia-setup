@@ -17,18 +17,32 @@ NVIDIA_API_KEY=nvapi-...\n\n\
 Відкрити сторінку зараз?" \
     --width=600 --height=300 || exit 0
 
+mkdir -p "$HOME/.hermes"
+touch "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+grep -qE '^NVIDIA_API_KEY=' "$ENV_FILE" 2>/dev/null \
+    || printf '\nNVIDIA_API_KEY=\n' >> "$ENV_FILE"
+
 if command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "https://build.nvidia.com/settings/api-keys" &
+    xdg-open "https://build.nvidia.com/settings/api-keys" >/dev/null 2>&1 &
 fi
 
-# Спробуємо відкрити .env у текстовому редакторі.
-if command -v kitty >/dev/null 2>&1; then
-    kitty -e sh -c "if [ ! -f '$ENV_FILE' ]; then touch '$ENV_FILE'; chmod 600 '$ENV_FILE'; fi; nano '$ENV_FILE'" &
+# Відкриваємо .env у текстовому редакторі (nano є в базових пакетах).
+editor=""
+for candidate in nano vi vim; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        editor="$candidate"
+        break
+    fi
+done
+
+if command -v kitty >/dev/null 2>&1 && [ -n "$editor" ]; then
+    kitty -e "$editor" "$ENV_FILE"
 elif command -v xdg-open >/dev/null 2>&1; then
-    xdg-open "$ENV_FILE" &
+    xdg-open "$ENV_FILE" >/dev/null 2>&1 &
 fi
 
 zenity --info --title="Наступний крок" \
-    --text="Після додавання ключа перезавантажте Hermes або просто продовжуйте працювати.\
+    --text="Після додавання ключа перезавантажте Hermes або просто продовжуйте працювати.\n\
 Перевірку можна запустити знову через вікно вітання." \
     --width=500 --height=200 2>/dev/null || true
