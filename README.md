@@ -39,20 +39,32 @@ sudo ./setup-system.sh
 1. Встановлює базові пакети, локаль `uk_UA.UTF-8` та часовий пояс `Europe/Kyiv`.
 2. Підключає **ButterRepo** (`https://apt.justaguy.dev`, ключ `/usr/share/keyrings/butterrepo.gpg`).
 3. Підключає **офіційний репозиторій Noctalia** (`pkg.noctalia.dev/deb`, ключ `nickh-archive-keyring.gpg`, джерело `noctalia-trixie.sources`).
-4. Встановлює `mangowc libwlroots-0.19 libscenefx-0.4`, `noctalia`, `kitty`, `xwayland`, портали, PipeWire/WirePlumber, polkit, шрифти та допоміжні інструменти.
+4. Встановлює `mangowc libwlroots-0.19 libscenefx-0.4`, `noctalia`, `kitty`, `xwayland`, портали, PipeWire/WirePlumber, polkit, шрифти, `lightdm`, `zenity` та допоміжні інструменти.
 5. Пише конфігурацію MangoWM 0.14.x у `~/.config/mango/`:
    - `config.conf` — `source`-посилання, `layer_animations=0`, `xkb_rules_layout=us,ua`, `source-optional=~/.config/mango/noctalia.conf` (для кольорів теми Noctalia).
    - `layout.conf` — `circle_layout=scroller,tile,grid` і параметри Scroller.
    - `input.conf` — розкладки `us,ua`, перемикання `grp:alt_shift_toggle`.
    - `rules.conf` — `windowrule=isnamedscratchpad:1,single_scratchpad:0,...` для `hermes-scratchpad` і `opencode-scratchpad`.
    - `keybinds.conf` — scratchpad (Super+A / Super+O), IPC-команди Noctalia, `exchange_client` (не `move_client`), макети, фокус, теги.
-   - `autostart.conf` — `exec-once=noctalia` (Noctalia сама керує шпалерами, окрема `awww` не потрібна).
+   - `autostart.conf` — `exec-once=noctalia` + `exec-once=~/.config/mango/welcome.sh` (вікно вітання при першому вході).
 6. Перевіряє конфігурацію `mango -c ... -p`.
 7. Встановлює Hermes Agent (`--non-interactive`) та конфігурує `model.provider=nvidia`, `model.default=nvidia/nemotron-3.5-super-vl-120b-a12b`, `terminal.backend=local`, `approvals.mode=smart`, додає резервну модель `z-ai/glm-5.3-flash`.
 8. Встановлює OpenCode (`~/.opencode/bin/opencode`).
 9. Створює навичку Hermes `~/.hermes/skills/debian-mangowm/SKILL.md`.
 
 Після завершення скрипта додайте ключ NVIDIA у `~/.hermes/.env` (або запустіть `hermes setup`) і оберіть сесію "Mango" у дисплей-менеджері або запустіть `mango-session` з TTY.
+
+### Вікно вітання при першому вході
+
+Після першого запуску MangoWM з'явиться вікно вітання з кнопками:
+
+- **Перевірити установку** — перевіряє наявність команд, конфігів, стану `lightdm` і ключа NVIDIA.
+- **NVIDIA API-ключ** — відкриває сторінку створення ключів на build.nvidia.com та файл `~/.hermes/.env` для редагування.
+- **Автоувійн** — налаштовує `lightdm` для входу без пароля (потребує `sudo`).
+- **Інструкція на GitHub** — відкриває README репозиторію у браузері.
+- **Не показувати більше** — приховає вікно вітання навжди.
+
+Скрипти знаходяться у `~/.config/mango/welcome.sh` і `~/.config/mango/scripts/`.
 
 ## Конфігурація MangoWM (0.14.x, ButterRepo)
 

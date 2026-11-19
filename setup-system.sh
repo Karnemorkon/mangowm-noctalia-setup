@@ -119,7 +119,7 @@ apt-get install -y \
     xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
     pipewire pipewire-audio wireplumber polkitd pkexec \
     fonts-noto-color-emoji upower power-profiles-daemon \
-    lightdm lightdm-gtk-greeter
+    lightdm lightdm-gtk-greeter zenity
 
 # ------------------------------------------------------------------------------
 # 4. Конфігурація MangoWM (0.14.x, ButterRepo)
@@ -261,11 +261,21 @@ cat > "$MANGO_CONF_DIR/autostart.conf" <<'EOF'
 # Noctalia запускається один раз при старті композитора.
 # Вона сама керує шпалерами, тому окремий awww/swaybg не потрібен.
 exec-once=noctalia
+# Вікно вітання при першому вході (скрипт сам перевіряє прапор .welcome-shown).
+exec-once=~/.config/mango/welcome.sh
 EOF
 
 # Порожній файл, який Noctalia перезапише кольорами теми.
 : > "$MANGO_CONF_DIR/noctalia.conf"
 
+chown -R "$REAL_USER:$REAL_GROUP" "$MANGO_CONF_DIR"
+
+# Скопіювати вікно вітання та допоміжні скрипти у конфіг Mango.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -d "$SCRIPT_DIR/scripts" ]; then
+    cp -a "$SCRIPT_DIR/scripts" "$MANGO_CONF_DIR/scripts"
+    chmod +x "$MANGO_CONF_DIR/welcome.sh" "$MANGO_CONF_DIR/scripts"/*.sh 2>/dev/null || true
+fi
 chown -R "$REAL_USER:$REAL_GROUP" "$MANGO_CONF_DIR"
 
 # Перевірка синтаксису конфігурації без запуску композитора.
