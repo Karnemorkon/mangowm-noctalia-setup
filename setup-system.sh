@@ -275,6 +275,7 @@ chown -R "$REAL_USER:$REAL_GROUP" "$MANGO_CONF_DIR"
 
 # Скопіювати вікно вітання та допоміжні скрипти у конфіг Mango.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+rm -rf "$MANGO_CONF_DIR/scripts" "$MANGO_CONF_DIR/welcome.sh"
 if [ -f "$SCRIPT_DIR/welcome.sh" ]; then
     cp -a "$SCRIPT_DIR/welcome.sh" "$MANGO_CONF_DIR/welcome.sh"
 fi
