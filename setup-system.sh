@@ -149,6 +149,9 @@ source=~/.config/mango/autostart.conf
 # візуальні артефакти (див. docs Noctalia для Mango).
 layer_animations=0
 
+# Дозволити показ кількох іменованих scratchpad одночасно (Hermes + OpenCode).
+single_scratchpad=0
+
 # Мапа клавіатури us,ua, перемикання Alt+Shift.
 xkb_rules_layout=us,ua
 xkb_rules_options=grp:alt_shift_toggle
@@ -183,10 +186,10 @@ EOF
 
 cat > "$MANGO_CONF_DIR/rules.conf" <<'EOF'
 # Іменовані scratchpad-вікна для AI-агентів.
-# isnamedscratchpad:1 робить вікно плаваючим і"name_size"; single_scratchpad
-# (default 1) обмежує одночасний показ, тому ставимо 0 для двох агентів.
-windowrule=isnamedscratchpad:1,single_scratchpad:0,width:1100,height:700,appid:hermes-scratchpad
-windowrule=isnamedscratchpad:1,single_scratchpad:0,width:1200,height:750,appid:opencode-scratchpad
+# isnamedscratchpad:1 робить вікно плаваючим.
+# single_scratchpad=0 в config.conf дозволяє показувати обидва агенти одночасно.
+windowrule=isnamedscratchpad:1,width:1100,height:700,appid:hermes-scratchpad
+windowrule=isnamedscratchpad:1,width:1200,height:750,appid:opencode-scratchpad
 EOF
 
 cat > "$MANGO_CONF_DIR/keybinds.conf" <<'EOF'
@@ -272,10 +275,13 @@ chown -R "$REAL_USER:$REAL_GROUP" "$MANGO_CONF_DIR"
 
 # Скопіювати вікно вітання та допоміжні скрипти у конфіг Mango.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/welcome.sh" ]; then
+    cp -a "$SCRIPT_DIR/welcome.sh" "$MANGO_CONF_DIR/welcome.sh"
+fi
 if [ -d "$SCRIPT_DIR/scripts" ]; then
     cp -a "$SCRIPT_DIR/scripts" "$MANGO_CONF_DIR/scripts"
-    chmod +x "$MANGO_CONF_DIR/welcome.sh" "$MANGO_CONF_DIR/scripts"/*.sh 2>/dev/null || true
 fi
+chmod +x "$MANGO_CONF_DIR/welcome.sh" "$MANGO_CONF_DIR/scripts"/*.sh 2>/dev/null || true
 chown -R "$REAL_USER:$REAL_GROUP" "$MANGO_CONF_DIR"
 
 # Перевірка синтаксису конфігурації без запуску композитора.
@@ -381,6 +387,29 @@ if [ ! -x "$USER_HOME/.opencode/bin/opencode" ] && [ ! -x "$USER_HOME/.local/bin
 else
     log "  → opencode уже встановлений, пропускаю"
 fi
+
+# ------------------------------------------------------------------------------
+# PATH для Hermes та OpenCode
+# ------------------------------------------------------------------------------
+log "[6.5/8] Налаштування PATH для Hermes та OpenCode"
+
+# Додати ~/.local/bin і ~/.opencode/bin до PATH у .profile
+PROFILE="$USER_HOME/.profile"
+if ! grep -q 'HOME/\.local/bin' "$PROFILE" 2>/dev/null; then
+    cat >> "$PROFILE" <<'EOF'
+
+# MangoWM + Noctalia setup: PATH for Hermes and OpenCode
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"
+EOF
+fi
+
+# Файл env для mango-session (середовище для композитора)
+cat > "$MANGO_CONF_DIR/env" <<'EOF'
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"
+EOF
+chown "$REAL_USER:$REAL_GROUP" "$MANGO_CONF_DIR/env"
+
+chown -R "$REAL_USER:$REAL_GROUP" "$PROFILE"
 
 # ------------------------------------------------------------------------------
 # 7. Графічний вхід (Display Manager)

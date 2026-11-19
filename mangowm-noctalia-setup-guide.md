@@ -41,10 +41,10 @@ sudo ./setup-system.sh
 3. Підключає **офіційний репозиторій Noctalia** (`pkg.noctalia.dev/deb`, ключ `nickh-archive-keyring.gpg`, джерело `noctalia-trixie.sources`).
 4. Встановлює `mangowc libwlroots-0.19 libscenefx-0.4`, `noctalia`, `kitty`, `xwayland`, портали, PipeWire/WirePlumber, polkit, шрифти, `lightdm`, `zenity` та допоміжні інструменти.
 5. Пише конфігурацію MangoWM 0.14.x у `~/.config/mango/`:
-   - `config.conf` — `source`-посилання, `layer_animations=0`, `xkb_rules_layout=us,ua`, `source-optional=~/.config/mango/noctalia.conf` (для кольорів теми Noctalia).
+   - `config.conf` — `source`-посилання, `layer_animations=0`, `single_scratchpad=0`, `xkb_rules_layout=us,ua`, `source-optional=~/.config/mango/noctalia.conf` (для кольорів теми Noctalia).
    - `layout.conf` — `circle_layout=scroller,tile,grid` і параметри Scroller.
    - `input.conf` — розкладки `us,ua`, перемикання `grp:alt_shift_toggle`.
-   - `rules.conf` — `windowrule=isnamedscratchpad:1,single_scratchpad:0,...` для `hermes-scratchpad` і `opencode-scratchpad`.
+   - `rules.conf` — `windowrule=isnamedscratchpad:1,...` для `hermes-scratchpad` і `opencode-scratchpad`; `single_scratchpad=0` — в `config.conf`.
    - `keybinds.conf` — scratchpad (Super+A / Super+O), IPC-команди Noctalia, `exchange_client` (не `move_client`), макети, фокус, теги.
    - `autostart.conf` — `exec-once=noctalia` + `exec-once=~/.config/mango/welcome.sh` (вікно вітання при першому вході).
 6. Перевіряє конфігурацію `mango -c ... -p`.
@@ -76,7 +76,7 @@ sudo ./setup-system.sh
 |-----|------------------|--------------------|
 | Правило вікна | `windowrule=Parameter:Value,...` | `window_rule=...` |
 | Named scratchpad | `isnamedscratchpad:1` | `is_named_scratchpad:1` |
-| Один scratchpad одночасно | `single_scratchpad:0` (параметр `windowrule`) | глобальна `single_scratchpad=0` |
+| Один scratchpad одночасно | `single_scratchpad=0` (глобальна опція в `config.conf`, **не** параметр `windowrule`) | глобальна `single_scratchpad=0` |
 | Автозапуск | `exec-once=noctalia` | `exec_once=noctalia` |
 | Додатковий конфіг | `source-optional=...` | `source_optional=...` |
 | Обмін вікон | `exchange_client` | `move_client` (немає у 0.14.x) |
@@ -115,11 +115,11 @@ repeat_delay=300
 ### rules.conf
 
 ```ini
-windowrule=isnamedscratchpad:1,single_scratchpad:0,width:1100,height:700,appid:hermes-scratchpad
-windowrule=isnamedscratchpad:1,single_scratchpad:0,width:1200,height:750,appid:opencode-scratchpad
+windowrule=isnamedscratchpad:1,width:1100,height:700,appid:hermes-scratchpad
+windowrule=isnamedscratchpad:1,width:1200,height:750,appid:opencode-scratchpad
 ```
 
-`single_scratchpad:0` дозволяє одночасно бачити обидва scratchpad-а (Hermes і OpenCode). За замовчуванням `single_scratchpad=1` — тільки один одночасно.
+`single_scratchpad=0` задається як **глобальна опція** у `config.conf` (не як параметр `windowrule`), щоб дозволити одночасно бачити обидва scratchpad-а (Hermes і OpenCode). За замовчуванням `single_scratchpad=1` — тільки один одночасно.
 
 ### keybinds.conf
 
