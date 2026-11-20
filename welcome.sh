@@ -35,16 +35,18 @@ ACTION=$(zenity --list --title="Ласкаво просимо до MangoWM + Noc
 • <b>MangoWM</b> 0.14.4 (mangowc з ButterRepo)\n\
 • <b>Noctalia Shell</b> 5.5.0 — оболонка Wayland\n\
 • <b>Hermes Agent</b> + <b>OpenCode</b> у scratchpad-вікнах kitty\n\
+• <b>HolosTTS</b> — локальний український TTS + голосовий режим Hermes\n\
 • <b>Debian 13</b> (Trixie), uk_UA.UTF-8, Europe/Kyiv, us/ua (Alt+Shift)\n\
 • <b>lightdm</b> — графічний вхід після перезавантаження\n\n\
 Оберіть, що хочете зробити зараз:" \
     --column="Дія" --column="Опис" \
     verify "Перевірити установку" \
     nvidia "Налаштувати NVIDIA API-ключ" \
+    voice "Голосове керування (HolosTTS)" \
     autologin "Автовхід (без пароля)" \
     readme "Відкрити інструкцію на GitHub" \
     skip "Не показувати більше" \
-    --width=700 --height=420) || { touch "$FLAG"; exit 0; }
+    --width=700 --height=470) || { touch "$FLAG"; exit 0; }
 
 case "$ACTION" in
     verify)
@@ -52,6 +54,19 @@ case "$ACTION" in
         ;;
     nvidia)
         run_script "$SCRIPT_DIR/scripts/setup-nvidia.sh"
+        ;;
+    voice)
+        zenity --info --title="Голосове керування" \
+            --text="<b>Hermes + HolosTTS</b>\n\n\
+1. Відкрийте Hermes: Super+A.\n\
+2. /voice on — увімкнути мікрофон.\n\
+3. Ctrl+B — почати/зупинити запис.\n\
+4. /voice tts — озвучувати відповіді українською.\n\
+5. /voice off — вимкнути голосовий режим.\n\n\
+TTS працює локально: http://127.0.0.1:8004\n\
+Перевірка: systemctl --user status holos-tts\n\n\
+Потрібен мікрофон; у ВМ без нього голосове введення недоступне." \
+            --width=640 --height=380
         ;;
     autologin)
         run_script "$SCRIPT_DIR/scripts/setup-autologin.sh"

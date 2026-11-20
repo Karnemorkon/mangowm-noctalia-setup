@@ -5,6 +5,7 @@
 - **Композитор**: MangoWM 0.14.4 (пакет `mangowc` з [ButterRepo](https://apt.justaguy.dev)), пов'язаний із `libwlroots-0.19` + `libscenefx-0.4`.
 - **Оболонка**: Noctalia Shell 5.5.0 з офіційного APT-репозиторію.
 - **Термінал / AI-агенти**: kitty, Hermes Agent, OpenCode у іменованих scratchpad-вікнах.
+- **Голос**: HolosTTS — локальний український TTS; Hermes TTS/STT і голосовий режим (`/voice`).
 - **Локалізація**: `uk_UA.UTF-8`, `Europe/Kyiv`, розкладки `us,ua` (Alt+Shift).
 
 > ⚠️ ButterRepo доступний **тільки для amd64** (індекс arm64 повертає 404). `noctalia-trixie.sources` також оголошує `Architectures: amd64`.
@@ -25,6 +26,8 @@
 - Чиста amd64 Debian 13 (Trixie).
 - Запуск скрипта через `sudo` зі звичайного користувача (змінна `SUDO_USER` має бути задана).
 - Інтернет-доступ для `apt`, `curl`, `wget` та інсталяторів Hermes/OpenCode.
+- Мікрофон і audio-sink для голосового введення/озвучення (не обов'язково для встановлення).
+- ~1.5 ГБ вільного місця для HolosTTS і моделей (TTS ~0.8 ГБ + STT `small`).
 
 ## Встановлення
 
@@ -51,6 +54,7 @@ sudo ./setup-system.sh
 7. Встановлює Hermes Agent (`--non-interactive`) та конфігурує `model.provider=nvidia`, `model.default=nvidia/nemotron-3.5-super-vl-120b-a12b`, `terminal.backend=local`, `approvals.mode=smart`, додає резервну модель `z-ai/glm-5.3-flash`.
 8. Встановлює OpenCode (`~/.opencode/bin/opencode`).
 9. Створює навичку Hermes `~/.hermes/skills/debian-mangowm/SKILL.md`.
+10. Встановлює HolosTTS (локальний український TTS), налаштовує `tts.provider=holos`, `stt.provider=local` і голосовий режим Hermes.
 
 Шаблон теми Noctalia «Mango» **не вмикається**: він генерує синтаксис Mango 0.18+ (`root_color`, `border_color`, ...), несумісний з `mangowc` 0.14.4. Якщо шаблон уже було ввімкнено — вимкніть його, інакше Mango повідомить про невідомі ключі.
 
@@ -63,6 +67,7 @@ sudo ./setup-system.sh
 - **Перевірити установку** — перевіряє наявність команд, конфігів, стану `lightdm` і ключа NVIDIA.
 - **NVIDIA API-ключ** — відкриває сторінку створення ключів на build.nvidia.com та файл `~/.hermes/.env` для редагування.
 - **Автовхід** — налаштовує `lightdm` для входу без пароля (потребує прав адміністратора через `pkexec`).
+- **Голосове керування** — показує, як увімкнути мікрофон і TTS у Hermes (`/voice`).
 - **Інструкція на GitHub** — відкриває README репозиторію у браузері.
 - **Не показувати більше** — приховає вікно вітання навжди.
 
@@ -246,6 +251,33 @@ hermes config get approvals.mode
 
 Навичка системи: `~/.hermes/skills/debian-mangowm/SKILL.md`.
 
+## Голосове керування та TTS (HolosTTS)
+
+Скрипт встановлює [holos-tts-core](https://github.com/Karnemorkon/holos-tts-core) — локальний український TTS (C++/ONNX, без Python у рантаймі) — і налаштовує Hermes на голосовий режим.
+
+- **TTS**: HolosTTS слухає `127.0.0.1:8004`; Hermes використовує command-провайдер `holos`, який викликає `~/.local/bin/holos-tts-say` і конвертує WAV у MP3 через `ffmpeg`.
+- **STT**: локальний `faster-whisper` (`small`, мова `uk`); модель завантажується при першому використанні.
+- **Голосовий режим Hermes**: `/voice on` → `Ctrl+B` (почати/зупинити запис) → `/voice tts` (озвучувати відповіді) → `/voice off`.
+- **Сервіс**: `systemctl --user status holos-tts`; логи: `journalctl --user -u holos-tts -f`; перевірка: `curl -sf http://127.0.0.1:8004/healthz`.
+
+Перший запуск HolosTTS завантажує моделі (~0.8 ГБ) у `~/.local/share/holos-tts-core/models/`; перший запуск STT — модель Whisper. Для роботи потрібен мікрофон (для введення) і audio-sink (для озвучення). У ВМ без аудіопристроїв голосове введення недоступне; TTS можна перевірити через `curl`.
+
+Голоси:
+
+```bash
+curl -s http://127.0.0.1:8004/api/voices | jq
+```
+
+Змінити голос:
+
+```bash
+hermes config set --force tts.providers.holos.voice 'Жіноче контральто · доросле · темне'
+```
+
+Швидкість: `hermes config set tts.speed 1.0` (0.25–4.0).
+
+Вимкнути встановлення HolosTTS: `sudo ENABLE_HOLOS_TTS=0 ./setup-system.sh`. Вимкнути STT-залежності: `sudo ENABLE_VOICE_STT=0 ./setup-system.sh`.
+
 ## OpenCode
 
 Інсталятор: `curl -fsSL https://opencode.ai/install | bash`.
@@ -265,6 +297,12 @@ hermes fallback list
 
 # Наявність команд
 command -v mango mmsg noctalia hermes opencode kitty
+
+# Голос/TTS
+systemctl --user status holos-tts --no-pager
+curl -sf http://127.0.0.1:8004/healthz
+hermes config get tts.provider
+hermes config get stt.provider
 
 # Сесія
 # Виберіть "Mango" у display manager або запустіть з TTY:

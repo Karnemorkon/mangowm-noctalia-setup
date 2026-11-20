@@ -44,6 +44,14 @@ check_systemd() {
     fi
 }
 
+check_user_systemd() {
+    if systemctl --user is-enabled "$1" >/dev/null 2>&1; then
+        results+=("<b>✓</b> $1 (user) — увімкнено")
+    else
+        results+=("<b>✗</b> $1 (user) — <i>не увімкнено</i>")
+    fi
+}
+
 check_mango_config() {
     local conf="$HOME/.config/mango/config.conf"
     if [ ! -f "$conf" ]; then
@@ -66,12 +74,17 @@ check_cmd hermes "$HOME/.local/bin/hermes"
 check_cmd opencode "$HOME/.opencode/bin/opencode" "$HOME/.local/bin/opencode"
 check_cmd kitty /usr/bin/kitty
 check_cmd zenity /usr/bin/zenity
+check_cmd ffmpeg /usr/bin/ffmpeg
+check_cmd holos-tts-say "$HOME/.local/bin/holos-tts-say"
 
 check_file "$HOME/.config/mango/config.conf"
 check_file "$HOME/.config/mango/env"
 check_file "$HOME/.hermes/.env"
+check_file "$HOME/.local/share/holos-tts-core/holos-tts.sh"
+check_file "$HOME/.config/systemd/user/holos-tts.service"
 check_file /usr/share/wayland-sessions/mango.desktop
 check_systemd lightdm
+check_user_systemd holos-tts.service
 
 if [ "$(systemctl get-default 2>/dev/null)" = "graphical.target" ]; then
     results+=("<b>✓</b> graphical.target — активний")
@@ -90,6 +103,36 @@ if grep -qE '^NVIDIA_API_KEY=nvapi-' "$HOME/.hermes/.env" 2>/dev/null; then
     results+=("<b>✓</b> NVIDIA_API_KEY — налаштовано")
 else
     results+=("<b>✗</b> NVIDIA_API_KEY — <i>додайте у ~/.hermes/.env</i>")
+fi
+
+if command -v hermes >/dev/null 2>&1; then
+    if [ "$(hermes config get tts.provider 2>/dev/null | head -n1)" = "holos" ]; then
+        results+=("<b>✓</b> Hermes TTS — holos (HolosTTS)")
+    else
+        results+=("<b>!</b> Hermes TTS — не налаштовано на holos")
+    fi
+    if [ "$(hermes config get stt.provider 2>/dev/null | head -n1)" = "local" ]; then
+        results+=("<b>✓</b> Hermes STT — local (faster-whisper)")
+    else
+        results+=("<b>!</b> Hermes STT — не налаштовано на local")
+    fi
+    if [ "$(hermes config get stt.language 2>/dev/null | head -n1)" = "uk" ]; then
+        results+=("<b>✓</b> Hermes STT — мова uk")
+    else
+        results+=("<b>!</b> Hermes STT — мова не uk")
+    fi
+fi
+
+if curl -sf --max-time 2 http://127.0.0.1:8004/healthz >/dev/null 2>&1; then
+    results+=("<b>✓</b> HolosTTS — працює (127.0.0.1:8004)")
+else
+    results+=("<b>!</b> HolosTTS — не відповідає (systemctl --user start holos-tts)")
+fi
+
+if wpctl status 2>/dev/null | sed -n '/Sources:/,/Filters:/p' | grep -qE '^[[:space:]]*[0-9]+\.'; then
+    results+=("<b>✓</b> мікрофон — знайдено")
+else
+    results+=("<b>!</b> мікрофон — не знайдено (потрібен для /voice on)")
 fi
 
 # Показуємо результат у вікні zenity.

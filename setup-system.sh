@@ -117,6 +117,7 @@ apt-get install -y \
     xdg-desktop-portal xdg-desktop-portal-wlr xdg-desktop-portal-gtk \
     pipewire pipewire-audio wireplumber polkitd pkexec \
     dbus-user-session desktop-file-utils xdg-utils nano libatomic1 \
+    ffmpeg libportaudio2 alsa-utils \
     fonts-noto-color-emoji upower power-profiles-daemon \
     lightdm lightdm-gtk-greeter zenity
 
@@ -307,6 +308,11 @@ fi
 
 [ -x "$HERMES_BIN" ] || die "Hermes не встановився: не знайдено $HERMES_BIN"
 
+hermes_as_user() {
+    runuser -u "$REAL_USER" -- env HOME="$USER_HOME" USER="$REAL_USER" LOGNAME="$REAL_USER" \
+        "$HERMES_BIN" "$@"
+}
+
 runuser -u "$REAL_USER" -- env HOME="$USER_HOME" USER="$REAL_USER" LOGNAME="$REAL_USER" \
     "$HERMES_BIN" config set model.provider nvidia
 runuser -u "$REAL_USER" -- env HOME="$USER_HOME" USER="$REAL_USER" LOGNAME="$REAL_USER" \
@@ -367,9 +373,170 @@ metadata:
    `hermes setup` — лише коли користувач сам цього хоче.
 6. Не перезаписуйте `~/.hermes/config.yaml` повністю: використовуйте
    `hermes config set <key> <value>`.
+
+## Голос і TTS
+- **HolosTTS**: локальний український TTS на `http://127.0.0.1:8004`, systemd --user
+  unit `holos-tts.service`. Статус: `systemctl --user status holos-tts`; логи:
+  `journalctl --user -u holos-tts -f`; health: `curl -sf http://127.0.0.1:8004/healthz`.
+- **Hermes TTS**: `tts.provider=holos`, command-провайдер `~/.local/bin/holos-tts-say`
+  (WAV → MP3 через `ffmpeg`), типовий голос `Жіноче контральто · доросле · темне`.
+  Голоси: `curl -s http://127.0.0.1:8004/api/voices | jq`.
+- **Hermes STT**: `stt.provider=local` (faster-whisper, модель `small`, мова `uk`);
+  перший запуск завантажує модель. Голосовий режим: `/voice on`, `Ctrl+B` — запис,
+  `/voice tts` — озвучення, `/voice off` — вимкнути.
+- Не відкривайте порт 8004 у мережу: у HolosTTS немає автентифікації.
 EOF
 
 chown -R "$REAL_USER:$REAL_GROUP" "$HERMES_DIR"
+
+# ------------------------------------------------------------------------------
+# 5b. HolosTTS + голосовий режим Hermes
+# ------------------------------------------------------------------------------
+ENABLE_HOLOS_TTS="${ENABLE_HOLOS_TTS:-1}"
+ENABLE_VOICE_STT="${ENABLE_VOICE_STT:-1}"
+
+if [ "$ENABLE_HOLOS_TTS" = "1" ]; then
+    log "  → HolosTTS: локальний український TTS"
+    HOLOS_VERSION="${HOLOS_VERSION:-0.8.9}"
+    HOLOS_DIR="$USER_HOME/.local/share/holos-tts-core"
+    HOLOS_TARBALL="holos-tts-core-${HOLOS_VERSION}-linux-x64.tar.gz"
+    HOLOS_RELEASE="https://github.com/Karnemorkon/holos-tts-core/releases/download/v${HOLOS_VERSION}"
+    HOLOS_READY=0
+
+    if [ -x "$HOLOS_DIR/holos-tts.sh" ] && [ -f "$HOLOS_DIR/bin/holos-server" ]; then
+        log "  → HolosTTS уже розпаковано, пропускаю завантаження"
+        HOLOS_READY=1
+    else
+        HOLOS_TMP="$(mktemp -d)"
+        if curl -fL --retry 3 --retry-delay 2 \
+            -o "$HOLOS_TMP/$HOLOS_TARBALL" "$HOLOS_RELEASE/$HOLOS_TARBALL"; then
+            HOLOS_CHECKSUM_OK=1
+            if curl -fsSL --retry 3 -o "$HOLOS_TMP/SHA256SUMS" "$HOLOS_RELEASE/SHA256SUMS"; then
+                if (cd "$HOLOS_TMP" && grep -E "${HOLOS_TARBALL}$" SHA256SUMS | sha256sum -c - >/dev/null 2>&1); then
+                    :
+                else
+                    warn "HolosTTS: SHA256 не збігається — встановлення пропущено"
+                    HOLOS_CHECKSUM_OK=0
+                fi
+            else
+                warn "HolosTTS: не вдалося завантажити SHA256SUMS — продовжую без перевірки"
+            fi
+
+            if [ "$HOLOS_CHECKSUM_OK" = "1" ]; then
+                if tar -xzf "$HOLOS_TMP/$HOLOS_TARBALL" -C "$HOLOS_TMP"; then
+                    install -d -o "$REAL_USER" -g "$REAL_GROUP" "$USER_HOME/.local/share"
+                    rm -rf "$HOLOS_DIR"
+                    if [ -d "$HOLOS_TMP/holos-tts-core" ]; then
+                        mv "$HOLOS_TMP/holos-tts-core" "$HOLOS_DIR"
+                    else
+                        install -d "$HOLOS_DIR"
+                        cp -a "$HOLOS_TMP"/. "$HOLOS_DIR"/
+                        rm -f "$HOLOS_DIR/$HOLOS_TARBALL" "$HOLOS_DIR/SHA256SUMS"
+                    fi
+                    chmod +x "$HOLOS_DIR/holos-tts.sh" \
+                        "$HOLOS_DIR/download-models.sh" \
+                        "$HOLOS_DIR/bin/holos-server" 2>/dev/null || true
+                    chown -R "$REAL_USER:$REAL_GROUP" "$HOLOS_DIR"
+                    HOLOS_READY=1
+                else
+                    warn "HolosTTS: не вдалося розпакувати архів"
+                fi
+            fi
+        else
+            warn "HolosTTS: не вдалося завантажити $HOLOS_RELEASE/$HOLOS_TARBALL"
+        fi
+        rm -rf "$HOLOS_TMP"
+    fi
+
+    if [ "$HOLOS_READY" = "1" ] && [ ! -f "$HOLOS_DIR/models/holos-onnx/holos_onnx.json" ]; then
+        log "  → HolosTTS: завантаження моделей (~0.8 ГБ, один раз)"
+        if ! runuser -u "$REAL_USER" -- env HOME="$USER_HOME" \
+            bash "$HOLOS_DIR/download-models.sh"; then
+            warn "HolosTTS: не вдалося завантажити моделі; TTS не буде налаштовано"
+            HOLOS_READY=0
+        fi
+    fi
+
+    if [ "$HOLOS_READY" = "1" ]; then
+        install -m 0755 -o "$REAL_USER" -g "$REAL_GROUP" \
+            "$SCRIPT_DIR/scripts/holos-tts-say" "$USER_HOME/.local/bin/holos-tts-say"
+
+        install -d -o "$REAL_USER" -g "$REAL_GROUP" "$USER_HOME/.config/systemd/user"
+        cat > "$USER_HOME/.config/systemd/user/holos-tts.service" <<'EOF'
+[Unit]
+Description=HolosTTS Ukrainian TTS server (127.0.0.1:8004)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/holos-tts-core/holos-tts.sh
+Environment=HOLOS_OPEN_BROWSER=0
+Environment=HOLOS_HOST=127.0.0.1
+Environment=HOLOS_PORT=8004
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=180
+
+[Install]
+WantedBy=default.target
+EOF
+        chown "$REAL_USER:$REAL_GROUP" "$USER_HOME/.config/systemd/user/holos-tts.service"
+        chmod 644 "$USER_HOME/.config/systemd/user/holos-tts.service"
+
+        install -d -o "$REAL_USER" -g "$REAL_GROUP" \
+            "$USER_HOME/.config/systemd/user/default.target.wants"
+        ln -sf ../holos-tts.service \
+            "$USER_HOME/.config/systemd/user/default.target.wants/holos-tts.service"
+        chown -h "$REAL_USER:$REAL_GROUP" \
+            "$USER_HOME/.config/systemd/user/default.target.wants/holos-tts.service"
+
+        USER_UID="$(id -u "$REAL_USER")"
+        if [ -S "/run/user/$USER_UID/bus" ]; then
+            runuser -u "$REAL_USER" -- env XDG_RUNTIME_DIR="/run/user/$USER_UID" \
+                systemctl --user daemon-reload >/dev/null 2>&1 || true
+            runuser -u "$REAL_USER" -- env XDG_RUNTIME_DIR="/run/user/$USER_UID" \
+                systemctl --user enable --now holos-tts.service >/dev/null 2>&1 || true
+        fi
+
+        hermes_as_user config set tts.provider holos
+        hermes_as_user config set --force tts.providers.holos.type command
+        hermes_as_user config set --force tts.providers.holos.command \
+            "'$USER_HOME/.local/bin/holos-tts-say' {input_path} {output_path} {voice} {speed}"
+        hermes_as_user config set --force tts.providers.holos.format mp3
+        hermes_as_user config set --force tts.providers.holos.voice 'Жіноче контральто · доросле · темне'
+        hermes_as_user config set --force tts.providers.holos.voice_compatible true
+        hermes_as_user config set --force tts.providers.holos.timeout 180
+        hermes_as_user config set tts.speed 1.0
+    fi
+fi
+
+if [ "$ENABLE_VOICE_STT" = "1" ]; then
+    log "  → Hermes: локальний STT (faster-whisper, uk)"
+    hermes_as_user config set stt.provider local
+    hermes_as_user config set stt.language uk
+    hermes_as_user config set stt.local.model small
+    hermes_as_user config set stt.local.language uk
+    hermes_as_user config set stt.local.vad true
+    hermes_as_user config set stt.echo_transcripts true
+    hermes_as_user config set voice.auto_tts false
+    hermes_as_user config set voice.beep_enabled true
+
+    HERMES_LAUNCHER="$HERMES_DIR/hermes-agent/.hermes/bin/hermes"
+    HERMES_PY=""
+    if [ -f "$HERMES_LAUNCHER" ]; then
+        HERMES_PY="$(sed -n 's/^exec \([^ ]*python3\) .*/\1/p' "$HERMES_LAUNCHER" | head -n1)"
+    fi
+    if [ -n "$HERMES_PY" ] && [ -x "$HERMES_PY" ]; then
+        log "  → Hermes: встановлення voice/audio-io extras (faster-whisper, sounddevice)"
+        if ! runuser -u "$REAL_USER" -- env HOME="$USER_HOME" USER="$REAL_USER" \
+            LOGNAME="$REAL_USER" CI=true PYTHONPATH="$HERMES_DIR/hermes-agent" \
+            "$HERMES_PY" -c "import pm; pm.sync_venv(['voice', 'audio-io'], explicit=True)"; then
+            warn "Hermes: не вдалося встановити voice/audio-io. Голосове введення може бути недоступне."
+        fi
+    else
+        warn "Hermes: не знайдено Python для встановлення voice/audio-io. Голосове введення може бути недоступне."
+    fi
+fi
 
 # ------------------------------------------------------------------------------
 # 6. OpenCode
@@ -466,6 +633,7 @@ cat <<EOF
   • створено конфігурацію ~/.config/mango/ (mangowc 0.14.x синтаксис);
   • встановлено Hermes Agent та OpenCode;
   • створено навичку ~/.hermes/skills/debian-mangowm/SKILL.md;
+  • встановлено HolosTTS (локальний український TTS) і налаштовано голосовий режим Hermes;
   • шаблон теми Noctalia "Mango" НЕ ввімкнено: він вимагає Mango >= 0.18.
 
 Залишилося зробити вручну:
@@ -476,6 +644,16 @@ cat <<EOF
   2. Перевірити моделі:  hermes config get model
                         hermes fallback list
   3. Перезавантажити комп’ютер — з’явиться екран входу lightdm з сесією "Mango".
+
+Голосове керування (Hermes + HolosTTS):
+  1. Відкрийте Hermes: Super+A.
+  2. /voice on — увімкнути мікрофон.
+  3. Ctrl+B — почати/зупинити запис.
+  4. /voice tts — озвучувати відповіді українською (локально).
+  5. /voice off — вимкнути голосовий режим.
+  • Статус TTS: systemctl --user status holos-tts
+  • Логи: journalctl --user -u holos-tts -f
+  • Перший запуск TTS/STT завантажує моделі; потрібен мікрофон.
 
 Гарячі клавіші:
   Super+Return — kitty            Super+A — Hermes
@@ -488,5 +666,7 @@ cat <<EOF
   mango -c ~/.config/mango/config.conf -p
   journalctl --user -n 50 --no-pager
   cat ~/.cache/noctalia/noctalia.log
+  systemctl --user status holos-tts
+  journalctl --user -u holos-tts -n 50 --no-pager
 ==============================================================================
 EOF

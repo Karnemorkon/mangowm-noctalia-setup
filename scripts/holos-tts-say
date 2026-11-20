@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+INPUT="${1:-}"
+OUTPUT="${2:-}"
+VOICE="${3:-${HOLOS_TTS_VOICE:-Жіноче контральто · доросле · темне}}"
+SPEED="${4:-1.0}"
+URL="${HOLOS_TTS_URL:-http://127.0.0.1:8004}"
+
+die() { printf 'holos-tts-say: %s\n' "$*" >&2; exit 1; }
+
+[ -n "$INPUT" ] && [ -f "$INPUT" ] || die "не передано файл із текстом"
+[ -n "$OUTPUT" ] || die "не передано вихідний файл"
+[ -n "$VOICE" ] || VOICE='Жіноче контральто · доросле · темне'
+
+SPEED="$(LC_ALL=C awk -v s="${SPEED:-1.0}" 'BEGIN { n=s+0; if (n < 0.25 || n > 4.0) n=1.0; printf "%.2f", n }' 2>/dev/null || echo 1.00)"
+
+command -v jq >/dev/null 2>&1 || die "потрібен jq"
+command -v curl >/dev/null 2>&1 || die "потрібен curl"
+command -v ffmpeg >/dev/null 2>&1 || die "потрібен ffmpeg"
+
+health() {
+    curl -sf --max-time 2 "$URL/healthz" >/dev/null 2>&1
+}
+
+if ! health; then
+    systemctl --user start holos-tts.service >/dev/null 2>&1 || true
+    for _ in $(seq 1 60); do
+        health && break
+        sleep 1
+    done
+fi
+health || die "HolosTTS не запущено на $URL (systemctl --user start holos-tts.service)"
+
+mkdir -p "$(dirname "$OUTPUT")"
+TMP_WAV="$(mktemp --suffix=.wav)"
+trap 'rm -f "$TMP_WAV"' EXIT
+
+jq -n --rawfile text "$INPUT" --arg voice "$VOICE" --arg speed "$SPEED" \
+    '{model:"tts-1", input:$text, voice:$voice, response_format:"wav", speed:($speed|tonumber)}' \
+    | curl -fsS --max-time 180 -X POST "$URL/v1/audio/speech" \
+        -H 'Content-Type: application/json' --data-binary @- -o "$TMP_WAV" \
+    || die "HolosTTS повернув помилку синтезу"
+
+[ -s "$TMP_WAV" ] || die "HolosTTS повернув порожній аудіофайл"
+
+case "${OUTPUT##*.}" in
+    wav|WAV)
+        cp "$TMP_WAV" "$OUTPUT"
+        ;;
+    mp3|MP3)
+        ffmpeg -y -loglevel error -i "$TMP_WAV" -codec:a libmp3lame -q:a 4 "$OUTPUT"
+        ;;
+    ogg|OGG|opus|OPUS)
+        ffmpeg -y -loglevel error -i "$TMP_WAV" -c:a libopus -b:a 64k -f ogg "$OUTPUT"
+        ;;
+    *)
+        ffmpeg -y -loglevel error -i "$TMP_WAV" "$OUTPUT"
+        ;;
+esac
+
+[ -s "$OUTPUT" ] || die "не вдалося створити $OUTPUT"
